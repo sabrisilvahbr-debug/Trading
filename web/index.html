@@ -1,0 +1,495 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Mesa 25 — Escritório Virtual de Trading</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@500;600;700&family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<style>
+/* Pregao noturno: palco 3D no topo, instrumentacao abaixo em grade de 12 colunas */
+:root{
+  color-scheme: dark;
+  --bg:#0a0e13; --panel:#111823; --panel2:#0d141d; --line:#1d2836;
+  --fg:#e7eef7; --mut:#8396ad; --dim:#5b6a7d;
+  --up:#36d399; --down:#ff6b6b; --warn:#f0a93b; --accent:#59a5ff;
+  --f-disp:'Archivo',ui-sans-serif,system-ui,sans-serif;
+  --f-body:'IBM Plex Sans',ui-sans-serif,system-ui,sans-serif;
+  --f-mono:'IBM Plex Mono',ui-monospace,SFMono-Regular,monospace;
+}
+*{box-sizing:border-box}
+html,body{background:var(--bg);margin:0}
+body{font-family:var(--f-body);color:var(--fg);line-height:1.5;-webkit-font-smoothing:antialiased;font-size:14px}
+img{max-width:100%}
+.wrap{max-width:1180px;margin:0 auto;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:0 56px}
+h1,h2,h3{font-family:var(--f-disp);text-wrap:balance;margin:0}
+.mono{font-family:var(--f-mono);font-variant-numeric:tabular-nums}
+.lbl{font-family:var(--f-mono);font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:var(--dim)}
+
+header.bar{position:sticky;top:env(safe-area-inset-top,0px);z-index:10;background:var(--panel2);border-bottom:1px solid var(--line)}
+.bar-in{max-width:1180px;margin:0 auto;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:10px;display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+.brand{font-family:var(--f-disp);font-weight:700;font-size:17px;letter-spacing:-.01em;display:flex;align-items:center;gap:9px}
+.brand i{width:9px;height:9px;border-radius:50%;background:var(--up);box-shadow:0 0 10px var(--up);display:block}
+.chips{display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-left:auto}
+.chip{font-family:var(--f-mono);font-size:10.5px;letter-spacing:.09em;padding:4px 9px;border:1px solid var(--line);border-radius:999px;color:var(--mut);background:var(--panel)}
+.chip.ok{color:var(--up);border-color:rgba(54,211,153,.35)}
+.chip.warn{color:var(--warn);border-color:rgba(240,169,59,.4)}
+.chip.stop{color:var(--down);border-color:rgba(255,107,107,.45)}
+button.halt{font-family:var(--f-mono);font-size:11px;letter-spacing:.1em;padding:7px 14px;border-radius:7px;border:1px solid rgba(255,107,107,.5);background:rgba(255,107,107,.1);color:#ff8f8f;cursor:pointer}
+button.halt:hover{background:rgba(255,107,107,.2)}
+button.halt.on{background:var(--up);border-color:var(--up);color:#06281c}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+
+.alert{display:flex;gap:10px;align-items:flex-start;margin-top:16px;padding:12px 14px;border:1px solid rgba(240,169,59,.3);background:rgba(240,169,59,.07);border-radius:9px;font-size:13.5px;color:#f3d6a6}
+.alert b{color:var(--warn)}
+
+.stage{position:relative;margin-top:16px;border:1px solid var(--line);border-radius:12px;overflow:hidden;background:linear-gradient(180deg,#0d141d,#070a0e)}
+#floor{display:block;width:100%;height:clamp(300px,46vh,460px);cursor:grab;touch-action:none}
+#floor:active{cursor:grabbing}
+.stage-hint{position:absolute;left:12px;bottom:10px;font-family:var(--f-mono);font-size:10px;color:var(--dim);letter-spacing:.07em;pointer-events:none}
+.legend{position:absolute;right:12px;top:10px;display:flex;flex-direction:column;gap:5px;pointer-events:none}
+.legend span{font-family:var(--f-mono);font-size:10px;color:var(--mut);display:flex;align-items:center;gap:6px}
+.legend i{width:7px;height:7px;border-radius:50%;display:block}
+
+.grid{display:grid;grid-template-columns:repeat(12,1fr);gap:14px;margin-top:14px}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:14px 16px;min-width:0}
+.c4{grid-column:span 4}.c6{grid-column:span 6}.c12{grid-column:span 12}.c8{grid-column:span 8}
+.card h3{font-size:13px;font-weight:600;margin-bottom:2px}
+.card .sub{font-size:11.5px;color:var(--dim);margin-bottom:12px}
+
+.kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:1px;background:var(--line);border:1px solid var(--line);border-radius:12px;overflow:hidden;margin-top:14px}
+.kpi{background:var(--panel);padding:14px 16px;min-width:0}
+.kpi .v{font-family:var(--f-mono);font-size:24px;font-weight:600;letter-spacing:-.02em;margin-top:6px;font-variant-numeric:tabular-nums}
+.kpi .f{font-family:var(--f-mono);font-size:10px;color:var(--dim);margin-top:5px}
+.up{color:var(--up)}.down{color:var(--down)}.warnc{color:var(--warn)}
+canvas.plot{width:100%;height:170px;display:block}
+
+.lim{display:flex;flex-direction:column;gap:11px}
+.lim-row{display:grid;grid-template-columns:1fr auto;gap:4px 10px;align-items:baseline}
+.lim-row .n{font-size:12.5px;color:var(--mut)}
+.lim-row .q{font-family:var(--f-mono);font-size:12px;font-variant-numeric:tabular-nums}
+.track{grid-column:1/-1;height:5px;border-radius:3px;background:#0a1016;overflow:hidden}
+.track i{display:block;height:100%;border-radius:3px;background:var(--up)}
+.track i.w{background:var(--warn)}.track i.d{background:var(--down)}
+
+.scn{display:grid;gap:10px}
+.scn-row{display:grid;grid-template-columns:84px 1fr 86px;gap:10px;align-items:center}
+.scn-row .t{font-family:var(--f-mono);font-size:10.5px;letter-spacing:.07em;color:var(--mut);text-transform:uppercase}
+.scn-bar{height:22px;background:#0a1016;border-radius:4px;position:relative;overflow:hidden}
+.scn-bar i{position:absolute;top:0;bottom:0;border-radius:3px}
+.scn-row .v{font-family:var(--f-mono);font-size:12.5px;text-align:right;font-variant-numeric:tabular-nums}
+.zero{position:absolute;top:0;bottom:0;width:1px;background:var(--dim)}
+
+.agents{display:grid;grid-template-columns:repeat(auto-fill,minmax(168px,1fr));gap:7px}
+.ag{display:flex;align-items:center;gap:8px;padding:7px 9px;border:1px solid var(--line);border-radius:7px;background:var(--panel2);cursor:pointer;text-align:left;font:inherit;color:inherit;min-width:0}
+.ag:hover{border-color:var(--accent)}
+.ag.sel{border-color:var(--accent);background:rgba(89,165,255,.09)}
+.ag i{width:7px;height:7px;border-radius:50%;flex:none}
+.ag .num{font-family:var(--f-mono);font-size:9.5px;color:var(--dim);flex:none;width:16px}
+.ag .nm{font-size:11.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ag .tg{font-family:var(--f-mono);font-size:8.5px;color:var(--dim);margin-left:auto;flex:none}
+
+#detail{border-left:2px solid var(--accent);padding:10px 14px;background:var(--panel2);border-radius:0 8px 8px 0;margin-bottom:12px}
+#detail h4{font-family:var(--f-disp);font-size:13.5px;margin:0 0 3px}
+#detail p{margin:0;font-size:12.5px;color:var(--mut)}
+#detail .meta{font-family:var(--f-mono);font-size:10.5px;color:var(--dim);margin-top:7px}
+
+.log{max-height:230px;overflow-y:auto}
+.log-row{display:grid;grid-template-columns:50px 1fr;gap:9px;padding:6px 0;border-bottom:1px solid #16202c;font-size:12px}
+.log-row time{font-family:var(--f-mono);font-size:10.5px;color:var(--dim)}
+.log-row b{font-weight:600;font-size:11px}
+.log-row span{color:var(--mut)}
+
+.fases{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}
+.fase{border:1px solid var(--line);border-radius:10px;padding:13px;background:var(--panel2)}
+.fase.now{border-color:var(--accent);box-shadow:inset 0 0 0 1px rgba(89,165,255,.18)}
+.fase h4{font-family:var(--f-disp);font-size:13px;margin:5px 0 6px}
+.fase p{margin:0;font-size:12px;color:var(--mut)}
+.fase .gate{font-family:var(--f-mono);font-size:10px;color:var(--dim);margin-top:9px;padding-top:8px;border-top:1px dashed #1d2836}
+
+.rules{margin:0;padding:0;list-style:none;display:grid;gap:9px}
+.rules li{display:grid;grid-template-columns:auto 1fr;gap:9px;font-size:13px;color:var(--mut)}
+.rules li b{color:var(--fg);font-weight:600}
+.rules li>span:first-child{color:var(--down);font-family:var(--f-mono);font-size:12px}
+.rules li.ok>span:first-child{color:var(--up)}
+
+footer{margin-top:28px;padding-top:16px;border-top:1px solid var(--line);font-size:11.5px;color:var(--dim)}
+@media(max-width:880px){.c4,.c6,.c8{grid-column:span 12}.kpis{grid-template-columns:repeat(2,1fr)}.fases{grid-template-columns:1fr}}
+@media(prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
+</style>
+</head>
+<body>
+
+<header class="bar">
+  <div class="bar-in">
+    <div class="brand"><i></i>Mesa 25</div>
+    <div class="chips">
+      <span class="chip warn" id="chipMode">MODO PAPER</span>
+      <span class="chip" id="chipRegime">REGIME NORMAL</span>
+      <span class="chip ok" id="chipAg">25/25 ATIVOS</span>
+      <button class="halt" id="haltBtn" type="button">PAUSA GERAL</button>
+    </div>
+  </div>
+</header>
+
+<div class="wrap">
+  <div class="alert">
+    <span>▲</span>
+    <div><b>Dados sintéticos.</b> Nenhuma corretora está conectada e nenhuma ordem real existe. Os números abaixo saem do mesmo motor que está em <code>src/intelligence</code>, alimentado por um gerador de preços local. Nada aqui é recomendação de investimento.</div>
+  </div>
+
+  <section class="stage">
+    <canvas id="floor"></canvas>
+    <div class="legend">
+      <span><i style="background:#36d399"></i>operando</span>
+      <span><i style="background:#59a5ff"></i>analisando</span>
+      <span><i style="background:#f0a93b"></i>aguardando dado</span>
+      <span><i style="background:#ff6b6b"></i>bloqueado</span>
+    </div>
+    <div class="stage-hint">arraste para girar · role para aproximar · clique numa mesa</div>
+  </section>
+
+  <div class="kpis">
+    <div class="kpi"><div class="lbl">P&amp;L do dia</div><div class="v mono" id="kPnl">—</div><div class="f" id="kPnlF">simulado</div></div>
+    <div class="kpi"><div class="lbl">Capital</div><div class="v mono" id="kCap">—</div><div class="f">base fictícia R$ 10.000</div></div>
+    <div class="kpi"><div class="lbl">Exposição</div><div class="v mono" id="kExp">—</div><div class="f">teto 60% · sem alavancagem</div></div>
+    <div class="kpi"><div class="lbl">Drawdown máx.</div><div class="v mono" id="kDD">—</div><div class="f">corte automático em 10%</div></div>
+  </div>
+
+  <div class="grid">
+    <div class="card c8">
+      <h3>Curva de capital</h3>
+      <div class="sub">260 pregões simulados · cruzamento de médias 10/30, apenas comprado, com corretagem, spread e slippage descontados a cada perna</div>
+      <canvas class="plot" id="eq"></canvas>
+      <div class="lbl" style="margin-top:10px" id="eqFoot">—</div>
+    </div>
+
+    <div class="card c4">
+      <h3>Guardião de Risco</h3>
+      <div class="sub">Limites em código, em <code>src/config/limits.ts</code>. Nenhum agente os altera.</div>
+      <div class="lim" id="lims"></div>
+    </div>
+
+    <div class="card c6">
+      <h3>Três cenários · 30 pregões</h3>
+      <div class="sub">4.000 reamostragens dos retornos simulados. Não é previsão.</div>
+      <div class="scn" id="scn"></div>
+      <div class="lbl" style="margin-top:12px" id="scnFoot">—</div>
+    </div>
+
+    <div class="card c6">
+      <h3>Log de decisões</h3>
+      <div class="sub">Toda ordem registra motivo, dados usados e resultado.</div>
+      <div class="log" id="log"></div>
+    </div>
+
+    <div class="card c12">
+      <h3>Os 25 agentes</h3>
+      <div class="sub">C = cálculo determinístico · L = interpreta texto e propõe · Clique numa mesa ou num nome.</div>
+      <div id="detail"><h4>Selecione um agente</h4><p>Cada mesa é um agente com função única, log próprio e heartbeat. Nenhum deles envia ordem sem o aval do Guardião, e só um deles tem permissão de enviar ordem.</p><div class="meta">—</div></div>
+      <div class="agents" id="agents"></div>
+    </div>
+
+    <div class="card c12">
+      <h3>Como a empresa sai do papel</h3>
+      <div class="sub">Cada fase só começa se a anterior fechar positiva depois de custos e impostos.</div>
+      <div class="fases">
+        <div class="fase now"><span class="lbl">Fase 1 · agora</span><h4>Paper trading</h4><p>Dados reais por API pública, dinheiro fictício. Valida motor de sinais, Guardião, conciliação e recuperação de falha.</p><div class="gate">Passa se: 60 pregões sem furar limite e sem divergência de conciliação.</div></div>
+        <div class="fase"><span class="lbl">Fase 2</span><h4>Piloto</h4><p>Dinheiro real pequeno, definido por você, com stop diário apertado e chave de API sem permissão de saque. Modo REAL pede sua aprovação por ordem.</p><div class="gate">Passa se: resultado líquido positivo no período combinado.</div></div>
+        <div class="fase"><span class="lbl">Fase 3</span><h4>Escala</h4><p>Aumento gradual dentro dos tetos, mantidos os mesmos limites. Violação devolve o sistema para a fase anterior.</p><div class="gate">Encerra se: drawdown de 10% ou dois meses líquidos negativos.</div></div>
+      </div>
+    </div>
+
+    <div class="card c12">
+      <h3>O que este sistema não faz</h3>
+      <div class="sub">Limites de projeto, não de versão. Eles não saem nas próximas fases.</div>
+      <ul class="rules">
+        <li><span>✕</span><div><b>Não faz login com a sua senha.</b> Nenhum agente digita credencial, token ou dado de pagamento em site de corretora. O acesso é por chave de API criada por você, sem permissão de saque.</div></li>
+        <li><span>✕</span><div><b>Não envia ordem real sem a sua aprovação.</b> No modo REAL, cada ordem aprovada pelo Guardião ainda espera o seu "sim".</div></li>
+        <li><span>✕</span><div><b>Não promete lucro nem taxa de acerto.</b> A maioria das estratégias automáticas perde dinheiro depois de corretagem, spread, slippage e imposto. Quando a conta não fecha, o sistema recomenda parar.</div></li>
+        <li><span>✕</span><div><b>Não opera dinheiro de terceiros.</b> Gerir recursos de outras pessoas exige registro na CVM. Isto é ferramenta de uso próprio.</div></li>
+        <li><span>✕</span><div><b>Não obedece a texto de fora.</b> Notícia, termo de uso e relatório são dados não confiáveis: o LLM resume, nunca executa instrução vinda deles.</div></li>
+        <li class="ok"><span>✓</span><div><b>Para sozinho.</b> Dado velho, divergência entre fontes acima de 0,5%, halt de mercado ou stop diário atingido congelam a mesa antes de qualquer ordem.</div></li>
+      </ul>
+    </div>
+  </div>
+
+  <footer>Mesa 25 · painel de simulação em modo PAPER. Valores em BRL fictícios gerados localmente, sem conexão com corretora ou fonte de mercado. Não é recomendação de investimento nem aconselhamento financeiro, jurídico ou tributário.</footer>
+</div>
+
+<script>
+/* ============ motor: mesma lógica de src/intelligence, em uma página ============ */
+function mulberry32(seed){var a=seed|0;return function(){a=(a+0x6D2B79F5)|0;var t=Math.imul(a^a>>>15,1|a);t=(t+Math.imul(t^t>>>7,61|t))^t;return((t^t>>>14)>>>0)/4294967296}}
+var rnd=mulberry32(20261029);
+function gauss(){var u=rnd()||1e-9;return Math.sqrt(-2*Math.log(u))*Math.cos(6.283185307*rnd())}
+
+var N=260,px=[42.80];
+for(var i=1;i<N;i++){var s=(i>150&&i<190)?2.1:1;px.push(Math.max(5,px[i-1]*(1+0.00018+0.016*s*gauss())))}
+function sma(a,n,i){if(i<n-1)return null;var t=0;for(var k=i-n+1;k<=i;k++)t+=a[k];return t/n}
+
+var CAP0=10000,COST=0.0005,eq=[CAP0],pos=0,trades=0,rets=[],costsPaid=0;
+for(var i=1;i<N;i++){
+  var f=sma(px,10,i-1),sl=sma(px,30,i-1),want=(f!==null&&sl!==null&&f>sl)?1:0,c=0;
+  if(want!==pos){c=COST;trades++;pos=want}
+  var r=pos*((px[i]-px[i-1])/px[i-1])-c;
+  costsPaid+=eq[i-1]*c;rets.push(r);eq.push(eq[i-1]*(1+r));
+}
+var last=eq[eq.length-1],peak=0,mdd=0;
+eq.forEach(function(v){if(v>peak)peak=v;var d=(peak-v)/peak;if(d>mdd)mdd=d});
+var pnlDay=eq[eq.length-1]-eq[eq.length-2],exposure=pos?0.42:0,totalRet=last/CAP0-1;
+
+var P=4000,H=30,out=[];
+for(var p=0;p<P;p++){var v=1;for(var d=0;d<H;d++)v*=(1+rets[Math.floor(rnd()*rets.length)]);out.push(v-1)}
+out.sort(function(a,b){return a-b});
+function qt(f){return out[Math.floor(f*(P-1))]}
+var p5=qt(.05),p50=qt(.5),p95=qt(.95),pLoss=out.filter(function(x){return x<0}).length/P;
+
+function brl(v){return (v<0?"−":"")+"R$ "+Math.abs(v).toLocaleString("pt-BR",{minimumFractionDigits:2,maximumFractionDigits:2})}
+function pct(v,d){return (v>0?"+":v<0?"−":"")+Math.abs(v*100).toFixed(d===undefined?1:d)+"%"}
+
+var kPnl=document.getElementById("kPnl");
+kPnl.textContent=brl(pnlDay);kPnl.className="v mono "+(pnlDay>=0?"up":"down");
+document.getElementById("kPnlF").textContent="simulado · "+trades+" operações · "+brl(costsPaid)+" de custo";
+document.getElementById("kCap").textContent=brl(last);
+document.getElementById("kExp").textContent=(exposure*100).toFixed(0)+"%";
+var kDD=document.getElementById("kDD");
+kDD.textContent="−"+(mdd*100).toFixed(1)+"%";
+kDD.className="v mono "+(mdd>0.08?"down":mdd>0.05?"warnc":"");
+document.getElementById("eqFoot").textContent="RETORNO "+pct(totalRet)+"  ·  DRAWDOWN MÁX "+(mdd*100).toFixed(1)+"%  ·  COMPRAR E SEGURAR "+pct(px[N-1]/px[0]-1)+"  ·  FONTE: GERADOR LOCAL";
+
+/* curva */
+var cv=document.getElementById("eq"),cx=cv.getContext("2d");
+function drawEq(){
+  var w=cv.clientWidth,h=cv.clientHeight,dp=Math.min(window.devicePixelRatio||1,2);
+  cv.width=w*dp;cv.height=h*dp;cx.setTransform(dp,0,0,dp,0,0);cx.clearRect(0,0,w,h);
+  var mn=Math.min.apply(null,eq),mx=Math.max.apply(null,eq),pad=(mx-mn)*0.12||1;mn-=pad;mx+=pad;
+  var X=function(i){return i/(eq.length-1)*(w-46)+4},Y=function(v){return h-14-(v-mn)/(mx-mn)*(h-26)};
+  cx.font="10px 'IBM Plex Mono',monospace";
+  for(var g=0;g<=3;g++){var val=mn+(mx-mn)*g/3,y=Y(val);
+    cx.strokeStyle="#16202c";cx.lineWidth=1;cx.beginPath();cx.moveTo(4,y);cx.lineTo(w-42,y);cx.stroke();
+    cx.fillStyle="#5b6a7d";cx.fillText((val/1000).toFixed(1)+"k",w-38,y+3)}
+  var y0=Y(CAP0);cx.setLineDash([3,4]);cx.strokeStyle="#3a4a5e";cx.beginPath();cx.moveTo(4,y0);cx.lineTo(w-42,y0);cx.stroke();cx.setLineDash([]);
+  var up=last>=CAP0,grd=cx.createLinearGradient(0,0,0,h);
+  grd.addColorStop(0,up?"rgba(54,211,153,.26)":"rgba(255,107,107,.26)");grd.addColorStop(1,"rgba(0,0,0,0)");
+  cx.beginPath();cx.moveTo(X(0),Y(eq[0]));for(var i=1;i<eq.length;i++)cx.lineTo(X(i),Y(eq[i]));
+  cx.lineTo(X(eq.length-1),h-14);cx.lineTo(X(0),h-14);cx.closePath();cx.fillStyle=grd;cx.fill();
+  cx.beginPath();cx.moveTo(X(0),Y(eq[0]));for(var i=1;i<eq.length;i++)cx.lineTo(X(i),Y(eq[i]));
+  cx.strokeStyle=up?"#36d399":"#ff6b6b";cx.lineWidth=1.8;cx.lineJoin="round";cx.stroke();
+  cx.beginPath();cx.arc(X(eq.length-1),Y(last),3.2,0,6.284);cx.fillStyle=up?"#36d399":"#ff6b6b";cx.fill();
+}
+drawEq();window.addEventListener("resize",drawEq);
+
+/* cenários */
+var scn=document.getElementById("scn"),span=Math.max(Math.abs(p5),Math.abs(p95))*1.15||.1;
+[["Pessimista (P5)",p5,"#ff6b6b"],["Base (mediana)",p50,"#59a5ff"],["Otimista (P95)",p95,"#36d399"]].forEach(function(r){
+  var wpc=Math.abs(r[1])/span*50,left=r[1]>=0?50:50-wpc,d=document.createElement("div");
+  d.className="scn-row";
+  d.innerHTML='<div class="t">'+r[0]+'</div><div class="scn-bar"><span class="zero" style="left:50%"></span><i style="left:'+left+'%;width:'+wpc+'%;background:'+r[2]+'"></i></div><div class="v" style="color:'+r[2]+'">'+pct(r[1])+'</div>';
+  scn.appendChild(d);
+});
+document.getElementById("scnFoot").textContent="PROBABILIDADE DE PREJUÍZO EM 30 PREGÕES: "+(pLoss*100).toFixed(0)+"%  ·  VaR 95%: "+pct(p5)+"  ·  4.000 SIMULAÇÕES";
+
+/* limites */
+var LIM=[
+ {n:"Risco por operação",u:.62,c:"1,0% do capital",now:"0,62%"},
+ {n:"Exposição total",u:exposure/.6,c:"teto 60%",now:(exposure*100).toFixed(0)+"%"},
+ {n:"Stop diário",u:Math.min(1,Math.abs(Math.min(0,pnlDay))/(CAP0*.02)),c:"−2,0% do capital",now:pct(pnlDay/CAP0,2)},
+ {n:"Drawdown máximo",u:mdd/.10,c:"corte em 10%",now:"−"+(mdd*100).toFixed(1)+"%"},
+ {n:"Alavancagem",u:0,c:"bloqueada",now:"0,0×"},
+ {n:"Idade da cotação",u:.27,c:"máx. 15 s",now:"4,1 s"}
+];
+var limEl=document.getElementById("lims");
+LIM.forEach(function(l){
+  var u=Math.max(0,Math.min(1,l.u)),cls=u>.85?"d":u>.6?"w":"",col=u>.85?"var(--down)":u>.6?"var(--warn)":"var(--mut)";
+  var d=document.createElement("div");d.className="lim-row";
+  d.innerHTML='<div class="n">'+l.n+'</div><div class="q" style="color:'+col+'">'+l.now+' <span style="color:var(--dim)">/ '+l.c+'</span></div><div class="track"><i class="'+cls+'" style="width:'+(u*100).toFixed(0)+'%"></i></div>';
+  limEl.appendChild(d);
+});
+
+/* agentes */
+var AG=[
+["Diretor","L","orquestra a mesa, resolve conflito e escala para você. Em dúvida, a ação padrão é não operar."],
+["Coletor de cotações","C","preço e volume de duas fontes; trava tudo se divergirem mais de 0,5%."],
+["Coletor macro","C","juros, câmbio e índices de fontes oficiais, com data de referência."],
+["Coletor de fundamentos","C+L","balanços e indicadores; o LLM extrai e resume, nunca conclui."],
+["Notícias e sentimento","L","resume manchetes e marca tudo como dado não confiável."],
+["Analista técnico","C","médias, RSI, bandas e momentum calculados em código."],
+["Analista quantitativo","C","correlações, regime de volatilidade e sinais estatísticos."],
+["Gerador de estratégias","C+L","o LLM propõe regras em JSON validado; o código testa antes de valer."],
+["Guardião de risco","C","valida toda ordem contra os limites. Nenhum agente altera seus parâmetros."],
+["Dimensionador","C","tamanho por volatilidade-alvo ou Kelly conservador, já descontando o atrito."],
+["Executor de ordens","C","em PAPER simula; em REAL exige aval do Guardião e sua aprovação."],
+["Gestor de ordens","C","acompanha parciais, rejeições e timeouts; cancela o que não preenche."],
+["Tesoureiro","C","saldo, posições, exposição e P&L real, em modo somente leitura."],
+["Conciliador","C","bate posições contra a corretora e confere a cadeia de hashes do log."],
+["Monitor de mercado","C","detecta halt, circuit breaker, spread alargado e volume anômalo."],
+["Backtester","C","out-of-sample e walk-forward com custos antes de qualquer mudança."],
+["Detector de golpes","C+L","veta estratégia curve-fit e plataforma com reputação abaixo de 70."],
+["Cenários","C","Monte Carlo, VaR e probabilidade de drawdown."],
+["Contador","C+L","rascunho de DARF para day trade e swing. Não substitui contador."],
+["Segurança","C+L","rotação de chaves. Bloqueia tudo se achar chave com permissão de saque."],
+["Pesquisador","L","due diligence de ativos, custos e mudança de regra, só com fonte e data."],
+["Testador","C","roda a suíte e bloqueia o deploy se algum limite falhar."],
+["Relator","L","resumo diário e semanal narrando apenas números recebidos."],
+["Alertas","C","Telegram e e-mail em três níveis. Crítico exige confirmação."],
+["Simulador","C","opera a estratégia ao vivo com dinheiro fictício antes do real."]
+];
+var STATES=[[0x36d399,"#36d399","operando"],[0x59a5ff,"#59a5ff","analisando"],[0xf0a93b,"#f0a93b","aguardando dado"],[0xff6b6b,"#ff6b6b","bloqueado"]];
+var st=AG.map(function(_,i){return [0,1,1,2,0,1,0][i%7]});
+st[8]=0;
+var agEl=document.getElementById("agents"),det=document.getElementById("detail");
+AG.forEach(function(a,i){
+  var b=document.createElement("button");b.className="ag";b.type="button";
+  b.innerHTML='<span class="num">'+String(i+1).padStart(2,"0")+'</span><i style="background:'+STATES[st[i]][1]+'"></i><span class="nm">'+a[0]+'</span><span class="tg">'+a[1]+'</span>';
+  b.addEventListener("click",function(){pick(i)});
+  agEl.appendChild(b);
+});
+function pick(i){
+  Array.prototype.forEach.call(agEl.children,function(c,k){c.classList.toggle("sel",k===i)});
+  var a=AG[i],kind=a[1]==="C"?"CÓDIGO DETERMINÍSTICO":a[1]==="L"?"LLM — PROPÕE, NÃO DECIDE":"CÓDIGO + LLM";
+  det.innerHTML='<h4>'+String(i+1).padStart(2,"0")+' · '+a[0]+'</h4><p>'+a[2]+'</p><div class="meta">ESTADO: '+STATES[st[i]][2].toUpperCase()+'  ·  TIPO: '+kind+'  ·  ENVIA ORDEM: '+(i===10?"SIM, APÓS O GUARDIÃO":"NÃO")+'</div>';
+  highlight(i);
+}
+
+/* log */
+var logEl=document.getElementById("log");
+function addLog(t,who,msg,color){
+  var d=document.createElement("div");d.className="log-row";
+  d.innerHTML='<time>'+t+'</time><div><b style="color:'+(color||"var(--accent)")+'">'+who+'</b> <span>'+msg+'</span></div>';
+  logEl.insertBefore(d,logEl.firstChild);
+  while(logEl.children.length>40)logEl.removeChild(logEl.lastChild);
+}
+[["09:30","Diretor","pregão aberto em modo PAPER · 25 agentes com heartbeat","var(--accent)"],
+ ["09:31","Conciliador","cadeia de hashes do audit_log íntegra · 1.284 registros","var(--accent)"],
+ ["09:47","Monitor de mercado","spread normalizado após a abertura; regime volta a NORMAL","var(--accent)"],
+ ["09:55","Coletor de cotações","divergência entre fontes em 0,11% — dentro do limite","var(--accent)"],
+ ["09:58","Analista técnico","cruzamento de médias 10/30 para cima em SINT3 (sintético)","var(--accent)"],
+ ["10:02","Dimensionador","tamanho por volatilidade-alvo: 114 unidades, risco 1,00% do capital","var(--accent)"],
+ ["10:03","Guardião","ordem anterior recusada: risco em 1,06%, acima do teto de 1,00%","var(--down)"]
+].forEach(function(r){addLog(r[0],r[1],r[2],r[3])});
+
+/* pausa geral */
+var paused=false;
+document.getElementById("haltBtn").addEventListener("click",function(){
+  paused=!paused;this.classList.toggle("on",paused);
+  this.textContent=paused?"RETOMAR":"PAUSA GERAL";
+  var regime=document.getElementById("chipRegime");
+  regime.textContent=paused?"PAUSADO_MANUAL":"REGIME NORMAL";
+  regime.className="chip "+(paused?"stop":"");
+  document.getElementById("chipAg").textContent=paused?"0/25 OPERANDO":"25/25 ATIVOS";
+  document.getElementById("chipAg").className="chip "+(paused?"stop":"ok");
+  var now=new Date().toLocaleTimeString("pt-BR",{hour:"2-digit",minute:"2-digit"});
+  addLog(now,"Pausa manual",paused?"mesa congelada pelo operador; nenhuma ordem sai até retomar":"mesa retomada em modo PAPER",paused?"var(--down)":"var(--up)");
+  setDeskLights();
+});
+
+/* ============ escritório 3D ============ */
+var desks=[],scene,cam,ren,ray,sel=-1,theta=0.9,phi=1.02,dist=34,drag=false,lx=0,ly=0;
+var canvas3d=document.getElementById("floor");
+function init3d(){
+  if(typeof THREE==="undefined"){canvas3d.parentNode.style.display="none";return}
+  scene=new THREE.Scene();
+  scene.fog=new THREE.Fog(0x070a0e,30,78);
+  cam=new THREE.PerspectiveCamera(42,2,0.1,300);
+  ren=new THREE.WebGLRenderer({canvas:canvas3d,antialias:true,alpha:true});
+  ren.setPixelRatio(Math.min(window.devicePixelRatio||1,2));
+  ray=new THREE.Raycaster();
+
+  scene.add(new THREE.AmbientLight(0x4a5f7a,0.65));
+  var key=new THREE.DirectionalLight(0x9fc6ff,0.55);key.position.set(12,22,10);scene.add(key);
+  var fill=new THREE.PointLight(0x59a5ff,0.5,70);fill.position.set(-14,12,-10);scene.add(fill);
+
+  var floorMat=new THREE.MeshStandardMaterial({color:0x0e151e,roughness:0.92,metalness:0.05});
+  var floor=new THREE.Mesh(new THREE.PlaneGeometry(90,90),floorMat);
+  floor.rotation.x=-Math.PI/2;scene.add(floor);
+  var grid=new THREE.GridHelper(90,36,0x1d2836,0x141d27);grid.position.y=0.02;scene.add(grid);
+
+  // 25 mesas: 5 fileiras de 5, com corredor entre os blocos
+  var geoDesk=new THREE.BoxGeometry(3.1,0.18,1.7);
+  var geoLeg=new THREE.BoxGeometry(0.14,1.1,0.14);
+  var geoMon=new THREE.BoxGeometry(1.9,1.05,0.08);
+  var geoBody=new THREE.CylinderGeometry(0.34,0.42,1.0,10);
+  var geoHead=new THREE.SphereGeometry(0.26,12,10);
+  var geoChair=new THREE.BoxGeometry(0.8,0.1,0.8);
+  var matDesk=new THREE.MeshStandardMaterial({color:0x1a2533,roughness:0.65,metalness:0.2});
+  var matLeg=new THREE.MeshStandardMaterial({color:0x121a24,roughness:0.8});
+  var matChair=new THREE.MeshStandardMaterial({color:0x16202c,roughness:0.9});
+
+  for(var i=0;i<25;i++){
+    var row=Math.floor(i/5),col=i%5;
+    var g=new THREE.Group();
+    g.position.set((col-2)*6.4+(col>2?1.6:col<2?-1.6:0),0,(row-2)*6.0);
+    var top=new THREE.Mesh(geoDesk,matDesk);top.position.y=1.1;g.add(top);
+    [[-1.4,-0.7],[1.4,-0.7],[-1.4,0.7],[1.4,0.7]].forEach(function(p){
+      var l=new THREE.Mesh(geoLeg,matLeg);l.position.set(p[0],0.55,p[1]);g.add(l);
+    });
+    var monMat=new THREE.MeshStandardMaterial({color:0x0c1016,emissive:STATES[st[i]][0],emissiveIntensity:0.9,roughness:0.4});
+    var mon=new THREE.Mesh(geoMon,monMat);mon.position.set(0,1.75,-0.55);mon.rotation.x=-0.1;g.add(mon);
+    var stand=new THREE.Mesh(new THREE.BoxGeometry(0.2,0.45,0.2),matLeg);stand.position.set(0,1.42,-0.55);g.add(stand);
+    var bodyMat=new THREE.MeshStandardMaterial({color:0x27374a,roughness:0.85});
+    var body=new THREE.Mesh(geoBody,bodyMat);body.position.set(0,0.95,1.25);g.add(body);
+    var head=new THREE.Mesh(geoHead,new THREE.MeshStandardMaterial({color:0x3d5168,roughness:0.8}));
+    head.position.set(0,1.68,1.25);g.add(head);
+    var chair=new THREE.Mesh(geoChair,matChair);chair.position.set(0,0.42,1.25);g.add(chair);
+    var halo=new THREE.Mesh(new THREE.RingGeometry(1.5,1.75,24),new THREE.MeshBasicMaterial({color:0x59a5ff,transparent:true,opacity:0,side:THREE.DoubleSide}));
+    halo.rotation.x=-Math.PI/2;halo.position.y=0.05;g.add(halo);
+    g.userData={index:i,monitor:monMat,halo:halo,body:bodyMat};
+    scene.add(g);desks.push(g);
+  }
+  setDeskLights();
+  resize();animate();
+}
+function setDeskLights(){
+  desks.forEach(function(g,i){
+    var c=paused?0xff6b6b:STATES[st[i]][0];
+    g.userData.monitor.emissive.setHex(c);
+    g.userData.monitor.emissiveIntensity=paused?0.35:0.9;
+  });
+}
+function highlight(i){
+  sel=i;
+  desks.forEach(function(g,k){g.userData.halo.material.opacity=k===i?0.55:0});
+}
+function resize(){
+  if(!ren)return;
+  var w=canvas3d.clientWidth,h=canvas3d.clientHeight;
+  if(w===0||h===0)return;
+  ren.setSize(w,h,false);cam.aspect=w/h;cam.updateProjectionMatrix();
+}
+window.addEventListener("resize",function(){resize();drawEq()});
+var reduced=window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+function animate(){
+  requestAnimationFrame(animate);
+  if(!drag&&!reduced)theta+=0.0012;
+  cam.position.set(dist*Math.sin(phi)*Math.cos(theta),dist*Math.cos(phi)+4,dist*Math.sin(phi)*Math.sin(theta));
+  cam.lookAt(0,1.2,0);
+  ren.render(scene,cam);
+}
+canvas3d.addEventListener("pointerdown",function(e){drag=true;lx=e.clientX;ly=e.clientY;canvas3d.setPointerCapture(e.pointerId)});
+canvas3d.addEventListener("pointermove",function(e){
+  if(!drag)return;
+  theta-=(e.clientX-lx)*0.006;
+  phi=Math.max(0.35,Math.min(1.35,phi-(e.clientY-ly)*0.004));
+  lx=e.clientX;ly=e.clientY;
+});
+canvas3d.addEventListener("pointerup",function(e){
+  drag=false;
+  if(Math.abs(e.clientX-lx)<4&&Math.abs(e.clientY-ly)<4)clickDesk(e);
+});
+canvas3d.addEventListener("wheel",function(e){e.preventDefault();dist=Math.max(14,Math.min(58,dist+e.deltaY*0.03))},{passive:false});
+function clickDesk(e){
+  if(!ray)return;
+  var r=canvas3d.getBoundingClientRect();
+  var m=new THREE.Vector2(((e.clientX-r.left)/r.width)*2-1,-((e.clientY-r.top)/r.height)*2+1);
+  ray.setFromCamera(m,cam);
+  var hits=ray.intersectObjects(desks,true);
+  if(!hits.length)return;
+  var o=hits[0].object;
+  while(o&&o.userData.index===undefined)o=o.parent;
+  if(o)pick(o.userData.index);
+}
+init3d();
+pick(8);
+</script>
+</body>
+</html>

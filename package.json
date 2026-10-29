@@ -1,0 +1,21 @@
+{
+  "name": "mesa25",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Mesa 25 — escritorio virtual de trading com 25 agentes. Modo PAPER por padrao.",
+  "type": "module",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "test": "npm run build && node --test \"dist/tests/**/*.test.js\"",
+    "demo": "npm run build && node dist/src/index.js",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "devDependencies": {
+    "typescript": "5.6.3",
+    "@types/node": "20.14.10"
+  },
+  "license": "MIT"
+}
