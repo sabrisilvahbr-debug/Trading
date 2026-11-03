@@ -126,3 +126,19 @@ tempo; descobrir na Fase 3 custa dinheiro.
 ## Licença
 
 MIT.
+
+## Pesquisa (ai-trading-claude)
+
+A pasta `vendor/ai-trading-claude/` traz os skills de análise (MIT, ver `VENDOR.md`).
+São uma ferramenta de **pesquisa**: não se conectam a corretora e não enviam ordens.
+
+A saída de análise é texto de LLM. Para virar qualquer coisa no sistema, passa por
+`src/research/proposal.ts`, que:
+
+- exige formato exato e recusa campos extras;
+- recusa ticker fora da B3, stop do lado errado e proposta sem dados usados;
+- escala para o Diretor quando a confiança está abaixo de 0,70;
+- recalcula a quantidade em código, ignorando qualquer número sugerido pelo texto;
+- entrega uma intenção de ordem que ainda precisa passar pelo Guardião.
+
+Nenhum passo desse caminho envia ordem.
